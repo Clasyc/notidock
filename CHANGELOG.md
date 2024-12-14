@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.1.0](https://github.com/Clasyc/notidock/compare/v1.0.4...v1.1.0) (2024-12-14)
+
+
+### Features
+
+* add image tag into notification ([0a43ddd](https://github.com/Clasyc/notidock/commit/0a43ddd8af518397e4ec12c95adcc4bb0569c5b2))
+* add sliding window throttler support ([99a546c](https://github.com/Clasyc/notidock/commit/99a546cb9f8c995ef9bc2c554bfc7a03765bcf04))
+* add throttler ([786e4fd](https://github.com/Clasyc/notidock/commit/786e4fdcbc379838f81624a83c9042a756ab9917))
+* checking docker socket connection before running ([3b7ce28](https://github.com/Clasyc/notidock/commit/3b7ce280d38493355eacbf1cef9afa066a1762ba))
+* docker socket can be set in env var ([f11b25d](https://github.com/Clasyc/notidock/commit/f11b25d6806126b62327ede9a8a5f784e17134a0))
+
+
+### Maintenance
+
+* update readme ([68d362d](https://github.com/Clasyc/notidock/commit/68d362d634abad88dc571fe650fd9dfa930986c0))
+
 ## [1.0.4](https://github.com/Clasyc/notidock/compare/v1.0.3...v1.0.4) (2024-12-14)
 
 
