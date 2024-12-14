@@ -54,7 +54,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
+	err = checkDockerConnectivity(ctx, cli)
+	if err != nil {
+		panic(err)
+	}
 	notificationManager := setupNotificationManager()
 
 	req, err := createEventRequest(ctx)
@@ -318,4 +321,22 @@ func logConfig(config Config, m *notification.Manager) {
 		slog.Warn("0 notifiers configured, no notifications will be sent")
 		return
 	}
+}
+
+func checkDockerConnectivity(ctx context.Context, cli *client.Client) error {
+	// Try to ping the Docker daemon
+	ping, err := cli.Ping(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to connect to Docker daemon: %w", err)
+	}
+
+	// Log successful connection and API version
+	slog.Info("successfully connected to Docker daemon",
+		"apiVersion", ping.APIVersion,
+		"osType", ping.OSType,
+		"experimental", ping.Experimental,
+		"builderVersion", ping.BuilderVersion,
+	)
+
+	return nil
 }
