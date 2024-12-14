@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.4](https://github.com/Clasyc/notidock/compare/v1.0.3...v1.0.4) (2024-12-14)
+
+
+### Bug Fixes
+
+* trying assets upload to release fix ([5c2daf9](https://github.com/Clasyc/notidock/commit/5c2daf969fe58bbe83a7d1c4dbd627a35de7f965))
+
 ## [1.0.3](https://github.com/Clasyc/notidock/compare/v1.0.2...v1.0.3) (2024-12-14)
 
 
