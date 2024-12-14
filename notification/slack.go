@@ -127,6 +127,15 @@ func (s *SlackNotifier) Send(ctx context.Context, event Event) error {
 		},
 	}
 
+	// Add image information if available
+	if image, ok := event.Labels["image"]; ok {
+		fields = append(fields, field{
+			Title: "Image",
+			Value: image,
+			Short: true,
+		})
+	}
+
 	// Add execution duration if available
 	if event.ExecDuration != "N/A" {
 		fields = append(fields, field{
@@ -145,8 +154,12 @@ func (s *SlackNotifier) Send(ctx context.Context, event Event) error {
 		})
 	}
 
-	// Add all labels
+	// Add all labels except those we've already explicitly handled
 	for k, v := range event.Labels {
+		// Skip labels we've already handled
+		if k == "image" || k == "exitCode" || k == "execDuration" {
+			continue
+		}
 		fields = append(fields, field{
 			Title: k,
 			Value: v,
