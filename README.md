@@ -1,6 +1,7 @@
 # Notidock
 
-A Docker container event monitoring tool that watches for container lifecycle events with customizable filtering and labeling.
+A Docker container event monitoring tool that watches for container lifecycle events with customizable filtering and 
+labeling.
 
 ## Features
 
