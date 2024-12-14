@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/Clasyc/notidock/compare/v1.0.0...v1.0.1) (2024-12-14)
+
+
+### Bug Fixes
+
+* remove broken build workflow step ([427a16b](https://github.com/Clasyc/notidock/commit/427a16be3c26b884ec269008d0e0aded232f24c6))
+
 ## 1.0.0 (2024-12-14)
 
 
