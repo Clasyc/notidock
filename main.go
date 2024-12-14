@@ -58,6 +58,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	throttler, err := NewNotificationThrottler()
+	if err != nil {
+		panic(err)
+	}
+
 	notificationManager := setupNotificationManager()
 
 	req, err := createEventRequest(ctx)
@@ -91,7 +96,7 @@ func main() {
 				return
 			}
 			if event.Type == "container" {
-				handleContainerEvent(ctx, event, config, notificationManager)
+				handleContainerEvent(ctx, event, config, notificationManager, throttler)
 			}
 		}
 	}
@@ -254,7 +259,7 @@ func processEvents(ctx context.Context, decoder *json.Decoder) chan Event {
 	return eventChan
 }
 
-func handleContainerEvent(ctx context.Context, event Event, config Config, notificationManager *notification.Manager) {
+func handleContainerEvent(ctx context.Context, event Event, config Config, notificationManager *notification.Manager, throttler *NotificationThrottler) {
 	if !shouldMonitorContainer(config, event.Actor.Attributes) {
 		return
 	}
@@ -268,6 +273,16 @@ func handleContainerEvent(ctx context.Context, event Event, config Config, notif
 	}
 
 	containerName := getContainerName(event.Actor.Attributes)
+	imageTag := event.Actor.Attributes["image"]
+	if !throttler.ShouldNotify(containerName, imageTag) {
+		slog.Info("notification throttled",
+			"containerName", containerName,
+			"imageTag", imageTag,
+			"action", event.Action,
+		)
+		return
+	}
+
 	exitCodeFormatted := FormatExitCode(exitCode)
 
 	execDuration := "N/A"
@@ -310,6 +325,17 @@ func logConfig(config Config, m *notification.Manager) {
 		slog.Info("tracked exit codes", "value", "all")
 	}
 
+	if timeout := os.Getenv("NOTIDOCK_NOTIFICATION_TIMEOUT"); timeout != "" {
+		slog.Info("notification timeout", "value", timeout+"s")
+	} else {
+		slog.Info("notification timeout", "value", "disabled")
+	}
+	if cooldown := os.Getenv("NOTIDOCK_NOTIFICATION_COOLDOWN"); cooldown != "" {
+		slog.Info("notification cooldown", "value", cooldown+"s")
+	} else {
+		slog.Info("notification cooldown", "value", "disabled")
+	}
+
 	// Log Docker socket path
 	socketPath := os.Getenv("NOTIDOCK_DOCKER_SOCKET")
 	if socketPath == "" {
@@ -324,13 +350,11 @@ func logConfig(config Config, m *notification.Manager) {
 }
 
 func checkDockerConnectivity(ctx context.Context, cli *client.Client) error {
-	// Try to ping the Docker daemon
 	ping, err := cli.Ping(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Docker daemon: %w", err)
 	}
 
-	// Log successful connection and API version
 	slog.Info("successfully connected to Docker daemon",
 		"apiVersion", ping.APIVersion,
 		"osType", ping.OSType,
