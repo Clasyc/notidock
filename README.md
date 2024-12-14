@@ -46,12 +46,13 @@ Replace `your_webhook_url` with your Slack webhook URL.
 
 ### Environment Variables
 
-| Environment Variable         | Description                                                                                                                          | Default                      |
-|------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|------------------------------|
-| `NOTIDOCK_MONITOR_ALL`       | When "true", monitors all containers unless explicitly excluded. When "false", only monitors containers with explicit include labels | `false`                      |
-| `NOTIDOCK_TRACKED_EVENTS`    | Comma-separated list of events to track                                                                                              | `create,start,die,stop,kill` |
-| `NOTIDOCK_TRACKED_EXITCODES` | Comma-separated list of container exit codes to track. When empty, tracks all exit codes                                             | `""` (all exit codes)        |
-| `NOTIDOCK_SLACK_WEBHOOK_URL` | Webhook URL for Slack notifications                                                                                                  | -                            |
+| Environment Variable         | Description                                                                                                                          | Default                       |
+|------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|-------------------------------|
+| `NOTIDOCK_MONITOR_ALL`       | When "true", monitors all containers unless explicitly excluded. When "false", only monitors containers with explicit include labels | `false`                       |
+| `NOTIDOCK_TRACKED_EVENTS`    | Comma-separated list of events to track                                                                                              | `create,start,die,stop,kill`  |
+| `NOTIDOCK_TRACKED_EXITCODES` | Comma-separated list of container exit codes to track. When empty, tracks all exit codes                                             | `""` (all exit codes)         |
+| `NOTIDOCK_SLACK_WEBHOOK_URL` | Webhook URL for Slack notifications                                                                                                  | -                             |
+| `NOTIDOCK_DOCKER_SOCKET`     | Custom Docker socket path to connect to Docker daemon                                                                                | `unix:///var/run/docker.sock` |
 
 ### Container Labels
 

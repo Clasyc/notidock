@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/docker/docker/client"
 	"log/slog"
 	"net/http"
@@ -193,9 +194,18 @@ func shouldTrackEvent(config Config, action string, labels map[string]string) bo
 }
 
 func setupDockerClient() (*client.Client, error) {
+	socketPath := os.Getenv("NOTIDOCK_DOCKER_SOCKET")
+	if socketPath == "" {
+		socketPath = "unix:///var/run/docker.sock"
+	}
+
+	if !strings.HasPrefix(socketPath, "unix://") && !strings.HasPrefix(socketPath, "tcp://") {
+		return nil, fmt.Errorf("invalid socket path format: must start with unix:// or tcp://")
+	}
+
 	return client.NewClientWithOpts(
 		client.FromEnv,
-		client.WithHost("unix:///var/run/docker.sock"),
+		client.WithHost(socketPath),
 	)
 }
 
@@ -296,6 +306,13 @@ func logConfig(config Config, m *notification.Manager) {
 	} else {
 		slog.Info("tracked exit codes", "value", "all")
 	}
+
+	// Log Docker socket path
+	socketPath := os.Getenv("NOTIDOCK_DOCKER_SOCKET")
+	if socketPath == "" {
+		socketPath = "unix:///var/run/docker.sock"
+	}
+	slog.Info("docker socket path", "value", socketPath)
 
 	if len(m.Notifiers()) == 0 {
 		slog.Warn("0 notifiers configured, no notifications will be sent")
