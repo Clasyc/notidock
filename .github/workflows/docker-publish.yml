@@ -118,3 +118,23 @@ jobs:
           path: |
             notidock-*
             checksums.txt
+
+      - name: Upload release assets
+        if: github.event_name == 'release' && github.event.action == 'published'
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: notidock-linux-amd64
+          asset_name: notidock-linux-amd64
+          asset_content_type: application/octet-stream
+
+      - name: Upload other release assets
+        if: github.event_name == 'release' && github.event.action == 'published'
+        run: |
+          for file in notidock-* checksums.txt; do
+            curl -XPOST \
+              -H "Authorization: Bearer ${{ secrets.TOKEN }}" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @$file \
+              "${{ github.event.release.upload_url }}?name=$(basename $file)";
+          done
