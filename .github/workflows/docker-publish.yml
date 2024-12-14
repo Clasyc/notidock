@@ -133,7 +133,7 @@ jobs:
         run: |
           for file in notidock-* checksums.txt; do
             curl -XPOST \
-              -H "Authorization: Bearer ${{ secrets.TOKEN }}" \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
               -H "Content-Type: application/octet-stream" \
               --data-binary @$file \
               "${{ github.event.release.upload_url }}?name=$(basename $file)";
