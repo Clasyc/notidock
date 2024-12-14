@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/Clasyc/notidock/compare/v1.0.2...v1.0.3) (2024-12-14)
+
+
+### Maintenance
+
+* add artifact upload to release ([37abcc9](https://github.com/Clasyc/notidock/commit/37abcc9d049ef90f9f282476ee58e619c59c43b2))
+
 ## [1.0.2](https://github.com/Clasyc/notidock/compare/v1.0.1...v1.0.2) (2024-12-14)
 
 
