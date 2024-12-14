@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - '**.md'
+      - '.github/workflows/**'
+      - '.release-please-manifest.json'
 
 permissions:
   contents: write
