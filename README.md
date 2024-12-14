@@ -17,7 +17,7 @@ labeling and sends notifications to [Slack](https://slack.com/).
 Download the latest release binary:
 ```
 curl -L -o ~/.local/bin/notidock \
-  https://github.com/Clasyc/notidock/releases/download/v1.1.0/notidock-linux-amd64 && \
+  https://github.com/Clasyc/notidock/releases/download/v1.1.1/notidock-linux-amd64 && \
   chmod +x ~/.local/bin/notidock
 ```
 
