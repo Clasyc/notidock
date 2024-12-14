@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/Clasyc/notidock/compare/v1.1.0...v1.1.1) (2024-12-14)
+
+
+### Bug Fixes
+
+* workflow ([245b015](https://github.com/Clasyc/notidock/commit/245b01590c52f53898035f011997e5575ae8417a))
+
 ## [1.1.0](https://github.com/Clasyc/notidock/compare/v1.0.4...v1.1.0) (2024-12-14)
 
 
