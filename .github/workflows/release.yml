@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - name: Install release-please
+        run: npm install -g release-please
+
+      - name: Run release-please
+        uses: google-github-actions/release-please-action@v3
+        id: release
+        with:
+          release-type: go
+          package-name: notidock
+          changelog-types: |
+            [
+              {"type":"feat","section":"Features","hidden":false},
+              {"type":"fix","section":"Bug Fixes","hidden":false},
+              {"type":"chore","section":"Maintenance","hidden":false},
+              {"type":"docs","section":"Documentation","hidden":false},
+              {"type":"style","section":"Styling","hidden":false},
+              {"type":"refactor","section":"Refactor","hidden":false},
+              {"type":"perf","section":"Performance","hidden":false},
+              {"type":"test","section":"Tests","hidden":false}
+            ]
+          default-branch: master
+          token: ${{ secrets.TOKEN }}

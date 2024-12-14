@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+    paths-ignore:
+      - 'CHANGELOG.md'
+      - '.release-please-manifest.json'
+  pull_request_target:
+    branches: [ master ]
+    paths-ignore:
+      - 'CHANGELOG.md'
+      - '.release-please-manifest.json'
+
+jobs:
+  test:
+    if: |
+      (github.event_name == 'push' && !contains(github.event.head_commit.message, 'chore(master): release')) ||
+      (github.event_name == 'pull_request_target' && github.actor == 'github-actions[bot]') ||
+      (github.event_name == 'pull_request' && github.actor == 'release-please[bot]') ||
+      (github.event_name != 'pull_request_target' && github.event_name != 'pull_request')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: coverage.txt
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Verify build
+        run: |
+          CGO_ENABLED=0 go build \
+            -trimpath \
+            -pgo=auto \
+            -ldflags='-w -s -extldflags=-static' \
+            -v ./...

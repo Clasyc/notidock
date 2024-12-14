@@ -1,0 +1,20 @@
+services:
+  notidock:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - SLACK_WEBHOOK_URL=your_webhook_url
+    group_add:
+      - "984"  # Docker socket group ID for your system
+    networks:
+      - notidock-net
+
+networks:
+  notidock-net:
+    driver: bridge
