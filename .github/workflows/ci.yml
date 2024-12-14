@@ -20,7 +20,7 @@ jobs:
       (github.event_name == 'push' && !contains(github.event.head_commit.message, 'chore(master): release')) ||
       (github.event_name == 'pull_request_target' && github.actor == 'github-actions[bot]') ||
       (github.event_name == 'pull_request' && github.actor == 'release-please[bot]') ||
-      (github.event_name != 'pull_request_target' && github.event_name != 'pull_request')
+      (github.event_name == 'pull_request')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
