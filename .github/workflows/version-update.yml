@@ -1,0 +1,28 @@
+name: Update Version References
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: master
+
+      - name: Update README version
+        run: |
+          sed -i "s|/v[0-9]\+\.[0-9]\+\.[0-9]\+/|/${GITHUB_REF_NAME}/|" README.md
+
+      - name: Commit README update
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: update version in README.md to ${GITHUB_REF_NAME} [skip ci]"
+          file_pattern: 'README.md'
+          branch: master
