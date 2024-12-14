@@ -53,8 +53,9 @@ Replace `your_webhook_url` with your Slack webhook URL.
 | `NOTIDOCK_TRACKED_EXITCODES`     | Comma-separated list of container exit codes to track. When empty, tracks all exit codes                                             | `""` (all exit codes)         |
 | `NOTIDOCK_SLACK_WEBHOOK_URL`     | Webhook URL for Slack notifications                                                                                                  | -                             |
 | `NOTIDOCK_DOCKER_SOCKET`         | Custom Docker socket path to connect to Docker daemon                                                                                | `unix:///var/run/docker.sock` |
-| `NOTIDOCK_NOTIFICATION_TIMEOUT`  | Time in seconds after which to suspend notifications for a container/image combination                                               | `0` (disabled)                |
-| `NOTIDOCK_NOTIFICATION_COOLDOWN` | Time in seconds to wait before resuming notifications after a timeout                                                                | `0` (disabled)                |
+| `NOTIDOCK_WINDOW_DURATION`       | Duration in seconds for the sliding window to track notification events                                                              | `60` (1 minute)               |
+| `NOTIDOCK_EVENT_THRESHOLD`       | Maximum number of notifications allowed within the window duration before throttling                                                 | `20`                          |
+| `NOTIDOCK_NOTIFICATION_COOLDOWN` | Time in seconds to wait before resuming notifications after being throttled                                                          | `0` (disabled)                |
 
 ### Container Labels
 
