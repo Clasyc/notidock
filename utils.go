@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -116,4 +119,49 @@ func FormatExitCode(code string) string {
 	}
 
 	return fmt.Sprintf("%s %s", code, explanation)
+}
+
+func EnvOrDefault[T any](key string, defaultValue T, parser func(string) (T, error)) T {
+	if value, exists := os.LookupEnv(EnvPrefix + key); exists && value != "" {
+		if parsed, err := parser(value); err == nil {
+			return parsed
+		}
+		// Log warning about invalid value and fallback to default
+		slog.Warn("invalid environment variable value",
+			"key", EnvPrefix+key,
+			"value", value,
+			"fallback", defaultValue,
+		)
+	}
+	return defaultValue
+}
+
+// Parsers for different types
+func parseBool(s string) (bool, error) {
+	return s == "true", nil
+}
+
+func parseString(s string) (string, error) {
+	return s, nil
+}
+
+func parseInt(s string) (int, error) {
+	return strconv.Atoi(s)
+}
+
+func parseDuration(s string) (time.Duration, error) {
+	return time.ParseDuration(s)
+}
+
+func parseStringSlice(s string) ([]string, error) {
+	if s == "" {
+		return nil, nil
+	}
+	result := make([]string, 0)
+	for _, item := range strings.Split(s, ",") {
+		if trimmed := strings.TrimSpace(item); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result, nil
 }

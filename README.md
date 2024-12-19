@@ -56,6 +56,9 @@ Replace `your_webhook_url` with your Slack webhook URL.
 | `NOTIDOCK_WINDOW_DURATION`       | Duration in seconds for the sliding window to track notification events                                                              | `60` (1 minute)               |
 | `NOTIDOCK_EVENT_THRESHOLD`       | Maximum number of notifications allowed within the window duration before throttling                                                 | `20`                          |
 | `NOTIDOCK_NOTIFICATION_COOLDOWN` | Time in seconds to wait before resuming notifications after being throttled                                                          | `0` (disabled)                |
+| `NOTIDOCK_MONITOR_HEALTH`        | When "true", enables container health monitoring and notifications                                                                   | `false`                       |
+| `NOTIDOCK_HEALTH_TIMEOUT`        | Maximum duration to monitor container health before timing out                                                                       | `60s`                         |
+| `NOTIDOCK_MAX_FAILING_STREAK`    | Maximum number of consecutive health check failures before stopping monitoring                                                       | `3`                           |
 
 ### Container Labels
 

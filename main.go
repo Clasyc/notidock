@@ -17,12 +17,28 @@ import (
 	"time"
 )
 
+const (
+	EnvPrefix = "NOTIDOCK_"
+
+	DefaultHealthTimeout     = 60 * time.Second
+	DefaultMaxFailingStreak  = 3
+	DefaultMonitorAll        = false
+	DefaultMonitorHealth     = false
+	DefaultDockerSocket      = "unix:///var/run/docker.sock"
+	DefaultWindowDuration    = 60 // seconds
+	DefaultEventThreshold    = 20
+	DefaultNotificationDelay = 0 // seconds
+
+	DefaultTrackedEvents = "create,start,die,stop,kill"
+)
+
 type Config struct {
 	MonitorAllContainers bool
 	TrackedEvents        []string
 	TrackedExitCodes     []string
 	MonitorHealth        bool
 	HealthCheckTimeout   time.Duration
+	MaxFailingStreak     int
 }
 
 type Event struct {
@@ -48,8 +64,10 @@ const (
 	LabelExitCodes     = LabelPrefix + "exitcodes"
 )
 
+var config Config
+
 func main() {
-	config := getConfig()
+	config = getConfig()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -99,26 +117,20 @@ func main() {
 				return
 			}
 			if event.Type == "container" {
-				handleContainerEvent(ctx, event, config, notificationManager, throttler)
+				handleContainerEvent(ctx, event, notificationManager, throttler, cli)
 			}
 		}
 	}
 }
 
 func getConfig() Config {
-	healthTimeout := 60 * time.Second
-	if timeoutStr := os.Getenv("NOTIDOCK_HEALTH_TIMEOUT"); timeoutStr != "" {
-		if timeout, err := time.ParseDuration(timeoutStr); err == nil {
-			healthTimeout = timeout
-		}
-	}
-
 	return Config{
-		MonitorAllContainers: os.Getenv("NOTIDOCK_MONITOR_ALL") == "true",
-		TrackedEvents:        parseEvents(os.Getenv("NOTIDOCK_TRACKED_EVENTS")),
-		TrackedExitCodes:     parseExitCodes(os.Getenv("NOTIDOCK_TRACKED_EXITCODES")),
-		MonitorHealth:        os.Getenv("NOTIDOCK_MONITOR_HEALTH") == "true",
-		HealthCheckTimeout:   healthTimeout,
+		MonitorAllContainers: EnvOrDefault("MONITOR_ALL", DefaultMonitorAll, parseBool),
+		TrackedEvents:        EnvOrDefault("TRACKED_EVENTS", strings.Split(DefaultTrackedEvents, ","), parseStringSlice),
+		TrackedExitCodes:     EnvOrDefault("TRACKED_EXITCODES", []string(nil), parseStringSlice),
+		MonitorHealth:        EnvOrDefault("MONITOR_HEALTH", DefaultMonitorHealth, parseBool),
+		HealthCheckTimeout:   EnvOrDefault("HEALTH_TIMEOUT", DefaultHealthTimeout, parseDuration),
+		MaxFailingStreak:     EnvOrDefault("MAX_FAILING_STREAK", DefaultMaxFailingStreak, parseInt),
 	}
 }
 
@@ -271,7 +283,7 @@ func processEvents(ctx context.Context, decoder *json.Decoder) chan Event {
 	return eventChan
 }
 
-func handleContainerEvent(ctx context.Context, event Event, config Config, notificationManager *notification.Manager, throttler *NotificationThrottler, cli *client.Client) {
+func handleContainerEvent(ctx context.Context, event Event, notificationManager *notification.Manager, throttler *NotificationThrottler, cli *client.Client) {
 	if !shouldMonitorContainer(config, event.Actor.Attributes) {
 		return
 	}
@@ -297,7 +309,7 @@ func handleContainerEvent(ctx context.Context, event Event, config Config, notif
 
 	// Handle health monitoring for newly created containers
 	if config.MonitorHealth && event.Action == "start" {
-		go monitorContainerHealth(ctx, cli, event.Actor.ID, containerName, config.HealthCheckTimeout, notificationManager)
+		go monitorContainerHealth(ctx, cli, event.Actor.ID, containerName, config, notificationManager)
 	}
 
 	exitCodeFormatted := FormatExitCode(exitCode)
@@ -332,12 +344,14 @@ func handleContainerEvent(ctx context.Context, event Event, config Config, notif
 	}
 }
 
-func monitorContainerHealth(ctx context.Context, cli *client.Client, containerID, containerName string, timeout time.Duration, notificationManager *notification.Manager) {
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+func monitorContainerHealth(ctx context.Context, cli *client.Client, containerID, containerName string, config Config, notificationManager *notification.Manager) {
+	timeoutCtx, cancel := context.WithTimeout(ctx, config.HealthCheckTimeout)
 	defer cancel()
 
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
+
+	var lastReportedStatus string
 
 	for {
 		select {
@@ -345,7 +359,7 @@ func monitorContainerHealth(ctx context.Context, cli *client.Client, containerID
 			slog.Warn("health check timeout reached",
 				"containerName", containerName,
 				"containerID", containerID,
-				"timeout", timeout,
+				"timeout", config.HealthCheckTimeout,
 			)
 			return
 		case <-ticker.C:
@@ -368,25 +382,52 @@ func monitorContainerHealth(ctx context.Context, cli *client.Client, containerID
 				return
 			}
 
-			// Report when container becomes healthy
-			if container.State.Health.Status == "healthy" {
-				notificationEvent := notification.Event{
+			currentStatus := container.State.Health.Status
+			failingStreak := container.State.Health.FailingStreak
+
+			// Only send notifications when status changes or failing streak exceeds threshold
+			if currentStatus != lastReportedStatus ||
+				(failingStreak >= config.MaxFailingStreak && currentStatus != "healthy") {
+
+				healthEvent := notification.Event{
 					ContainerName: containerName,
 					Action:        "health_status",
 					Time:          time.Now().Format(time.RFC3339),
-					Labels:        map[string]string{"health_status": "healthy"},
+					Labels: map[string]string{
+						"health_status":  currentStatus,
+						"failing_streak": strconv.Itoa(failingStreak),
+					},
 				}
 
-				if err := notificationManager.Send(ctx, notificationEvent); err != nil {
+				if err := notificationManager.Send(ctx, healthEvent); err != nil {
 					slog.Error("failed to send health notification",
 						"error", err,
 						"containerName", containerName,
 					)
 				}
 
-				slog.Info("container became healthy",
+				slog.Info("container health status update",
 					"containerName", containerName,
 					"containerID", containerID,
+					"status", currentStatus,
+					"failingStreak", failingStreak,
+				)
+
+				lastReportedStatus = currentStatus
+			}
+
+			// Stop monitoring if container is healthy
+			if currentStatus == "healthy" {
+				return
+			}
+
+			// Stop monitoring if failing streak exceeds maximum
+			if failingStreak >= config.MaxFailingStreak {
+				slog.Warn("stopping health monitoring due to excessive failures",
+					"containerName", containerName,
+					"containerID", containerID,
+					"failingStreak", failingStreak,
+					"maxAllowed", config.MaxFailingStreak,
 				)
 				return
 			}
