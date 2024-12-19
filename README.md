@@ -12,6 +12,7 @@ Notidock is a secure and lightweight Docker container event monitoring tool that
 > [!IMPORTANT]
 > **Compatibility Notice**: Currently, Notidock has been tested only on Ubuntu Linux 24.04 systems. While it may work on other Linux distributions or versions, full compatibility cannot be guaranteed. We welcome feedback and contributions for expanding platform support.
 
+![example.png](example.png)
 ## Key Features
 
 - **Flexible Monitoring**: Monitor all containers or select specific ones using labels
@@ -70,6 +71,9 @@ curl -L -o ~/.local/bin/notidock \
 
 # Make it executable
 chmod +x ~/.local/bin/notidock
+
+# Set Slack webhook URL
+export NOTIDOCK_SLACK_WEBHOOK_URL=your_webhook_url
 
 # Run
 notidock
