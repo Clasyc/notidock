@@ -14,12 +14,15 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 type Config struct {
 	MonitorAllContainers bool
 	TrackedEvents        []string
 	TrackedExitCodes     []string
+	MonitorHealth        bool
+	HealthCheckTimeout   time.Duration
 }
 
 type Event struct {
@@ -103,10 +106,19 @@ func main() {
 }
 
 func getConfig() Config {
+	healthTimeout := 60 * time.Second
+	if timeoutStr := os.Getenv("NOTIDOCK_HEALTH_TIMEOUT"); timeoutStr != "" {
+		if timeout, err := time.ParseDuration(timeoutStr); err == nil {
+			healthTimeout = timeout
+		}
+	}
+
 	return Config{
 		MonitorAllContainers: os.Getenv("NOTIDOCK_MONITOR_ALL") == "true",
 		TrackedEvents:        parseEvents(os.Getenv("NOTIDOCK_TRACKED_EVENTS")),
 		TrackedExitCodes:     parseExitCodes(os.Getenv("NOTIDOCK_TRACKED_EXITCODES")),
+		MonitorHealth:        os.Getenv("NOTIDOCK_MONITOR_HEALTH") == "true",
+		HealthCheckTimeout:   healthTimeout,
 	}
 }
 
@@ -259,7 +271,7 @@ func processEvents(ctx context.Context, decoder *json.Decoder) chan Event {
 	return eventChan
 }
 
-func handleContainerEvent(ctx context.Context, event Event, config Config, notificationManager *notification.Manager, throttler *NotificationThrottler) {
+func handleContainerEvent(ctx context.Context, event Event, config Config, notificationManager *notification.Manager, throttler *NotificationThrottler, cli *client.Client) {
 	if !shouldMonitorContainer(config, event.Actor.Attributes) {
 		return
 	}
@@ -281,6 +293,11 @@ func handleContainerEvent(ctx context.Context, event Event, config Config, notif
 			"action", event.Action,
 		)
 		return
+	}
+
+	// Handle health monitoring for newly created containers
+	if config.MonitorHealth && event.Action == "start" {
+		go monitorContainerHealth(ctx, cli, event.Actor.ID, containerName, config.HealthCheckTimeout, notificationManager)
 	}
 
 	exitCodeFormatted := FormatExitCode(exitCode)
@@ -312,6 +329,68 @@ func handleContainerEvent(ctx context.Context, event Event, config Config, notif
 
 	if err := notificationManager.Send(ctx, notificationEvent); err != nil {
 		slog.Error("failed to send notification", "error", err)
+	}
+}
+
+func monitorContainerHealth(ctx context.Context, cli *client.Client, containerID, containerName string, timeout time.Duration, notificationManager *notification.Manager) {
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			slog.Warn("health check timeout reached",
+				"containerName", containerName,
+				"containerID", containerID,
+				"timeout", timeout,
+			)
+			return
+		case <-ticker.C:
+			container, err := cli.ContainerInspect(ctx, containerID)
+			if err != nil {
+				slog.Error("failed to inspect container",
+					"error", err,
+					"containerName", containerName,
+					"containerID", containerID,
+				)
+				return
+			}
+
+			// Check if container has health check configured
+			if container.State.Health == nil {
+				slog.Info("container has no health check configured",
+					"containerName", containerName,
+					"containerID", containerID,
+				)
+				return
+			}
+
+			// Report when container becomes healthy
+			if container.State.Health.Status == "healthy" {
+				notificationEvent := notification.Event{
+					ContainerName: containerName,
+					Action:        "health_status",
+					Time:          time.Now().Format(time.RFC3339),
+					Labels:        map[string]string{"health_status": "healthy"},
+				}
+
+				if err := notificationManager.Send(ctx, notificationEvent); err != nil {
+					slog.Error("failed to send health notification",
+						"error", err,
+						"containerName", containerName,
+					)
+				}
+
+				slog.Info("container became healthy",
+					"containerName", containerName,
+					"containerID", containerID,
+				)
+				return
+			}
+		}
 	}
 }
 
