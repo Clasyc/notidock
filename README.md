@@ -9,6 +9,9 @@
 
 Notidock is a secure and lightweight Docker container event monitoring tool that sends notifications to **[Slack](https://slack.com/)**. It watches container lifecycle events with customizable filtering and labeling capabilities.
 
+> [!IMPORTANT]
+> **Compatibility Notice**: Currently, Notidock has been tested only on Ubuntu Linux 24.04 systems. While it may work on other Linux distributions or versions, full compatibility cannot be guaranteed. We welcome feedback and contributions for expanding platform support.
+
 ## Key Features
 
 - **Flexible Monitoring**: Monitor all containers or select specific ones using labels
