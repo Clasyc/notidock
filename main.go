@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"notidock/config"
 	"notidock/notification"
 	"os"
 	"os/signal"
@@ -16,30 +17,6 @@ import (
 	"syscall"
 	"time"
 )
-
-const (
-	EnvPrefix = "NOTIDOCK_"
-
-	DefaultHealthTimeout     = 60 * time.Second
-	DefaultMaxFailingStreak  = 3
-	DefaultMonitorAll        = false
-	DefaultMonitorHealth     = false
-	DefaultDockerSocket      = "unix:///var/run/docker.sock"
-	DefaultWindowDuration    = 60 // seconds
-	DefaultEventThreshold    = 20
-	DefaultNotificationDelay = 0 // seconds
-
-	DefaultTrackedEvents = "create,start,die,stop,kill"
-)
-
-type Config struct {
-	MonitorAllContainers bool
-	TrackedEvents        []string
-	TrackedExitCodes     []string
-	MonitorHealth        bool
-	HealthCheckTimeout   time.Duration
-	MaxFailingStreak     int
-}
 
 type Event struct {
 	Type     string `json:"Type"`
@@ -64,22 +41,22 @@ const (
 	LabelExitCodes     = LabelPrefix + "exitcodes"
 )
 
-var config Config
-
 func main() {
-	config = getConfig()
+	cfg := config.GetConfig()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cli, err := setupDockerClient()
+	cli, err := setupDockerClient(cfg.DockerSocket)
 	if err != nil {
 		panic(err)
 	}
+
 	err = checkDockerConnectivity(ctx, cli)
 	if err != nil {
 		panic(err)
 	}
-	throttler, err := NewNotificationThrottler()
+
+	throttler := NewNotificationThrottler(cfg)
 	if err != nil {
 		panic(err)
 	}
@@ -104,7 +81,16 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	logConfig(config, notificationManager)
+	// Log configuration
+	cfg.Log()
+	if len(notificationManager.Notifiers()) == 0 {
+		slog.Warn("notification settings", "status", "no notifiers configured")
+	} else {
+		slog.Info("notification settings", "notifiers_count", len(notificationManager.Notifiers()))
+	}
+
+	slog.Info("---")
+	slog.Info("notidock started, listening for container events...")
 
 	for {
 		select {
@@ -117,20 +103,9 @@ func main() {
 				return
 			}
 			if event.Type == "container" {
-				handleContainerEvent(ctx, event, notificationManager, throttler, cli)
+				handleContainerEvent(ctx, event, cfg, notificationManager, throttler, cli)
 			}
 		}
-	}
-}
-
-func getConfig() Config {
-	return Config{
-		MonitorAllContainers: EnvOrDefault("MONITOR_ALL", DefaultMonitorAll, parseBool),
-		TrackedEvents:        EnvOrDefault("TRACKED_EVENTS", strings.Split(DefaultTrackedEvents, ","), parseStringSlice),
-		TrackedExitCodes:     EnvOrDefault("TRACKED_EXITCODES", []string(nil), parseStringSlice),
-		MonitorHealth:        EnvOrDefault("MONITOR_HEALTH", DefaultMonitorHealth, parseBool),
-		HealthCheckTimeout:   EnvOrDefault("HEALTH_TIMEOUT", DefaultHealthTimeout, parseDuration),
-		MaxFailingStreak:     EnvOrDefault("MAX_FAILING_STREAK", DefaultMaxFailingStreak, parseInt),
 	}
 }
 
@@ -155,7 +130,7 @@ func parseExitCodes(codes string) []string {
 	return exitCodes
 }
 
-func shouldTrackExitCode(config Config, exitCode string, labels map[string]string) bool {
+func shouldTrackExitCode(cfg config.AppConfig, exitCode string, labels map[string]string) bool {
 	if containerExitCodes, exists := labels[LabelExitCodes]; exists {
 		codes := make([]string, 0)
 		for _, code := range strings.Split(containerExitCodes, ",") {
@@ -172,7 +147,7 @@ func shouldTrackExitCode(config Config, exitCode string, labels map[string]strin
 		return false
 	}
 
-	if len(config.TrackedExitCodes) == 0 {
+	if len(cfg.TrackedExitCodes) == 0 {
 		return true
 	}
 
@@ -180,7 +155,7 @@ func shouldTrackExitCode(config Config, exitCode string, labels map[string]strin
 		return false
 	}
 
-	for _, trackedCode := range config.TrackedExitCodes {
+	for _, trackedCode := range cfg.TrackedExitCodes {
 		if exitCode == trackedCode {
 			return true
 		}
@@ -188,11 +163,11 @@ func shouldTrackExitCode(config Config, exitCode string, labels map[string]strin
 	return false
 }
 
-func shouldMonitorContainer(config Config, labels map[string]string) bool {
+func shouldMonitorContainer(cfg config.AppConfig, labels map[string]string) bool {
 	if _, excluded := labels[LabelExclude]; excluded {
 		return false
 	}
-	if config.MonitorAllContainers {
+	if cfg.MonitorAllContainers {
 		return true
 	}
 	_, included := labels[LabelInclude]
@@ -206,7 +181,7 @@ func getContainerName(labels map[string]string) string {
 	return labels["name"]
 }
 
-func shouldTrackEvent(config Config, action string, labels map[string]string) bool {
+func shouldTrackEvent(cfg config.AppConfig, action string, labels map[string]string) bool {
 	if eventsList, exists := labels[LabelTrackedEvents]; exists {
 		containerEvents := strings.Split(eventsList, ",")
 		for _, event := range containerEvents {
@@ -217,7 +192,7 @@ func shouldTrackEvent(config Config, action string, labels map[string]string) bo
 		return false
 	}
 
-	for _, event := range config.TrackedEvents {
+	for _, event := range cfg.TrackedEvents {
 		if action == strings.TrimSpace(event) {
 			return true
 		}
@@ -225,12 +200,7 @@ func shouldTrackEvent(config Config, action string, labels map[string]string) bo
 	return false
 }
 
-func setupDockerClient() (*client.Client, error) {
-	socketPath := os.Getenv("NOTIDOCK_DOCKER_SOCKET")
-	if socketPath == "" {
-		socketPath = "unix:///var/run/docker.sock"
-	}
-
+func setupDockerClient(socketPath string) (*client.Client, error) {
 	if !strings.HasPrefix(socketPath, "unix://") && !strings.HasPrefix(socketPath, "tcp://") {
 		return nil, fmt.Errorf("invalid socket path format: must start with unix:// or tcp://")
 	}
@@ -283,16 +253,16 @@ func processEvents(ctx context.Context, decoder *json.Decoder) chan Event {
 	return eventChan
 }
 
-func handleContainerEvent(ctx context.Context, event Event, notificationManager *notification.Manager, throttler *NotificationThrottler, cli *client.Client) {
-	if !shouldMonitorContainer(config, event.Actor.Attributes) {
+func handleContainerEvent(ctx context.Context, event Event, cfg config.AppConfig, notificationManager *notification.Manager, throttler *NotificationThrottler, cli *client.Client) {
+	if !shouldMonitorContainer(cfg, event.Actor.Attributes) {
 		return
 	}
-	if !shouldTrackEvent(config, event.Action, event.Actor.Attributes) {
+	if !shouldTrackEvent(cfg, event.Action, event.Actor.Attributes) {
 		return
 	}
 
 	exitCode := event.Actor.Attributes["exitCode"]
-	if exitCode != "" && !shouldTrackExitCode(config, exitCode, event.Actor.Attributes) {
+	if exitCode != "" && !shouldTrackExitCode(cfg, exitCode, event.Actor.Attributes) {
 		return
 	}
 
@@ -308,8 +278,8 @@ func handleContainerEvent(ctx context.Context, event Event, notificationManager 
 	}
 
 	// Handle health monitoring for newly created containers
-	if config.MonitorHealth && event.Action == "start" {
-		go monitorContainerHealth(ctx, cli, event.Actor.ID, containerName, config, notificationManager)
+	if cfg.MonitorHealth && event.Action == "start" {
+		go monitorContainerHealth(ctx, cli, event.Actor.ID, containerName, cfg, notificationManager)
 	}
 
 	exitCodeFormatted := FormatExitCode(exitCode)
@@ -344,8 +314,8 @@ func handleContainerEvent(ctx context.Context, event Event, notificationManager 
 	}
 }
 
-func monitorContainerHealth(ctx context.Context, cli *client.Client, containerID, containerName string, config Config, notificationManager *notification.Manager) {
-	timeoutCtx, cancel := context.WithTimeout(ctx, config.HealthCheckTimeout)
+func monitorContainerHealth(ctx context.Context, cli *client.Client, containerID, containerName string, cfg config.AppConfig, notificationManager *notification.Manager) {
+	timeoutCtx, cancel := context.WithTimeout(ctx, cfg.HealthCheckTimeout)
 	defer cancel()
 
 	ticker := time.NewTicker(2 * time.Second)
@@ -359,7 +329,7 @@ func monitorContainerHealth(ctx context.Context, cli *client.Client, containerID
 			slog.Warn("health check timeout reached",
 				"containerName", containerName,
 				"containerID", containerID,
-				"timeout", config.HealthCheckTimeout,
+				"timeout", cfg.HealthCheckTimeout,
 			)
 			return
 		case <-ticker.C:
@@ -387,7 +357,7 @@ func monitorContainerHealth(ctx context.Context, cli *client.Client, containerID
 
 			// Only send notifications when status changes or failing streak exceeds threshold
 			if currentStatus != lastReportedStatus ||
-				(failingStreak >= config.MaxFailingStreak && currentStatus != "healthy") {
+				(failingStreak >= cfg.MaxFailingStreak && currentStatus != "healthy") {
 
 				healthEvent := notification.Event{
 					ContainerName: containerName,
@@ -422,50 +392,16 @@ func monitorContainerHealth(ctx context.Context, cli *client.Client, containerID
 			}
 
 			// Stop monitoring if failing streak exceeds maximum
-			if failingStreak >= config.MaxFailingStreak {
+			if failingStreak >= cfg.MaxFailingStreak {
 				slog.Warn("stopping health monitoring due to excessive failures",
 					"containerName", containerName,
 					"containerID", containerID,
 					"failingStreak", failingStreak,
-					"maxAllowed", config.MaxFailingStreak,
+					"maxAllowed", cfg.MaxFailingStreak,
 				)
 				return
 			}
 		}
-	}
-}
-
-func logConfig(config Config, m *notification.Manager) {
-	slog.Info("notidock started with configuration")
-	slog.Info("monitor all containers", "value", config.MonitorAllContainers)
-	slog.Info("tracked events", "value", config.TrackedEvents)
-	if len(config.TrackedExitCodes) > 0 {
-		slog.Info("tracked exit codes", "value", config.TrackedExitCodes)
-	} else {
-		slog.Info("tracked exit codes", "value", "all")
-	}
-
-	if timeout := os.Getenv("NOTIDOCK_NOTIFICATION_TIMEOUT"); timeout != "" {
-		slog.Info("notification timeout", "value", timeout+"s")
-	} else {
-		slog.Info("notification timeout", "value", "disabled")
-	}
-	if cooldown := os.Getenv("NOTIDOCK_NOTIFICATION_COOLDOWN"); cooldown != "" {
-		slog.Info("notification cooldown", "value", cooldown+"s")
-	} else {
-		slog.Info("notification cooldown", "value", "disabled")
-	}
-
-	// Log Docker socket path
-	socketPath := os.Getenv("NOTIDOCK_DOCKER_SOCKET")
-	if socketPath == "" {
-		socketPath = "unix:///var/run/docker.sock"
-	}
-	slog.Info("docker socket path", "value", socketPath)
-
-	if len(m.Notifiers()) == 0 {
-		slog.Warn("0 notifiers configured, no notifications will be sent")
-		return
 	}
 }
 

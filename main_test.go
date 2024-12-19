@@ -1,17 +1,20 @@
 package main
 
-import "testing"
+import (
+	"notidock/config"
+	"testing"
+)
 
 func TestShouldMonitorContainer(t *testing.T) {
 	tests := []struct {
 		name   string
-		config Config
+		cfg    config.AppConfig
 		labels map[string]string
 		want   bool
 	}{
 		{
 			name: "excluded container",
-			config: Config{
+			cfg: config.AppConfig{
 				MonitorAllContainers: true,
 			},
 			labels: map[string]string{
@@ -21,7 +24,7 @@ func TestShouldMonitorContainer(t *testing.T) {
 		},
 		{
 			name: "monitor all containers",
-			config: Config{
+			cfg: config.AppConfig{
 				MonitorAllContainers: true,
 			},
 			labels: map[string]string{},
@@ -29,7 +32,7 @@ func TestShouldMonitorContainer(t *testing.T) {
 		},
 		{
 			name: "included container",
-			config: Config{
+			cfg: config.AppConfig{
 				MonitorAllContainers: false,
 			},
 			labels: map[string]string{
@@ -39,7 +42,7 @@ func TestShouldMonitorContainer(t *testing.T) {
 		},
 		{
 			name: "not included container",
-			config: Config{
+			cfg: config.AppConfig{
 				MonitorAllContainers: false,
 			},
 			labels: map[string]string{},
@@ -49,7 +52,7 @@ func TestShouldMonitorContainer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := shouldMonitorContainer(tt.config, tt.labels)
+			got := shouldMonitorContainer(tt.cfg, tt.labels)
 			if got != tt.want {
 				t.Errorf("shouldMonitorContainer() = %v, want %v", got, tt.want)
 			}
@@ -60,14 +63,14 @@ func TestShouldMonitorContainer(t *testing.T) {
 func TestShouldTrackExitCode(t *testing.T) {
 	tests := []struct {
 		name     string
-		config   Config
+		cfg      config.AppConfig
 		exitCode string
 		labels   map[string]string
 		want     bool
 	}{
 		{
 			name: "container specific exit code",
-			config: Config{
+			cfg: config.AppConfig{
 				TrackedExitCodes: []string{"1", "2"},
 			},
 			exitCode: "137",
@@ -78,7 +81,7 @@ func TestShouldTrackExitCode(t *testing.T) {
 		},
 		{
 			name: "global exit code",
-			config: Config{
+			cfg: config.AppConfig{
 				TrackedExitCodes: []string{"137", "143"},
 			},
 			exitCode: "137",
@@ -87,7 +90,7 @@ func TestShouldTrackExitCode(t *testing.T) {
 		},
 		{
 			name: "untracked exit code",
-			config: Config{
+			cfg: config.AppConfig{
 				TrackedExitCodes: []string{"137", "143"},
 			},
 			exitCode: "1",
@@ -96,7 +99,7 @@ func TestShouldTrackExitCode(t *testing.T) {
 		},
 		{
 			name: "track all exit codes",
-			config: Config{
+			cfg: config.AppConfig{
 				TrackedExitCodes: nil,
 			},
 			exitCode: "1",
@@ -107,7 +110,7 @@ func TestShouldTrackExitCode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := shouldTrackExitCode(tt.config, tt.exitCode, tt.labels)
+			got := shouldTrackExitCode(tt.cfg, tt.exitCode, tt.labels)
 			if got != tt.want {
 				t.Errorf("shouldTrackExitCode() = %v, want %v", got, tt.want)
 			}
@@ -118,14 +121,14 @@ func TestShouldTrackExitCode(t *testing.T) {
 func TestShouldTrackEvent(t *testing.T) {
 	tests := []struct {
 		name   string
-		config Config
+		cfg    config.AppConfig
 		action string
 		labels map[string]string
 		want   bool
 	}{
 		{
 			name: "container specific event",
-			config: Config{
+			cfg: config.AppConfig{
 				TrackedEvents: []string{"start", "stop"},
 			},
 			action: "die",
@@ -136,7 +139,7 @@ func TestShouldTrackEvent(t *testing.T) {
 		},
 		{
 			name: "global event",
-			config: Config{
+			cfg: config.AppConfig{
 				TrackedEvents: []string{"start", "die"},
 			},
 			action: "die",
@@ -145,7 +148,7 @@ func TestShouldTrackEvent(t *testing.T) {
 		},
 		{
 			name: "untracked event",
-			config: Config{
+			cfg: config.AppConfig{
 				TrackedEvents: []string{"start", "stop"},
 			},
 			action: "die",
@@ -156,7 +159,7 @@ func TestShouldTrackEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := shouldTrackEvent(tt.config, tt.action, tt.labels)
+			got := shouldTrackEvent(tt.cfg, tt.action, tt.labels)
 			if got != tt.want {
 				t.Errorf("shouldTrackEvent() = %v, want %v", got, tt.want)
 			}
