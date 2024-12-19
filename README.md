@@ -1,161 +1,183 @@
 # Notidock
+<div style="text-align: center;">
+  <img src="gopher.png" alt="Gopher" width="300" height="300">
+</div>
 
-A Docker container event monitoring tool that watches for container lifecycle events with customizable filtering and 
-labeling and sends notifications to [Slack](https://slack.com/).
+[![Go Version](https://img.shields.io/badge/go-1.23%2B-blue.svg)](https://go.dev/)
+[![Docker Pulls](https://img.shields.io/docker/pulls/clasyc/notidock.svg)](https://hub.docker.com/r/clasyc/notidock)
+[![License](https://img.shields.io/github/license/clasyc/notidock.svg)](LICENSE)
 
-## Features
+Notidock is a secure and lightweight Docker container event monitoring tool that sends notifications to **[Slack](https://slack.com/)**. It watches container lifecycle events with customizable filtering and labeling capabilities.
 
-- Monitor all or selected containers via labels
-- Customizable event tracking (create, start, die, stop, kill)
-- Container-specific event filtering
-- Custom container naming via labels
-- Secure by default (read-only, no-new-privileges, non-root user)
+## Key Features
 
-## Quick Start
+- **Flexible Monitoring**: Monitor all containers or select specific ones using labels
+- **Event Filtering**: Track specific container events (create, start, die, etc.) globally or per container
+- **Custom Labeling**: Define custom container names and event filters using Docker labels
+- **Security-First**: Runs as non-root with read-only filesystem and minimal privileges
+- **Health Monitoring**: Optional container health check monitoring with customizable thresholds
+- **Rate Limiting**: Built-in notification throttling to prevent notification floods
 
-### Binary
-Download the latest release binary:
-```
-curl -L -o ~/.local/bin/notidock \
-  https://github.com/Clasyc/notidock/releases/download/v1.1.1/notidock-linux-amd64 && \
-  chmod +x ~/.local/bin/notidock
-```
+## Installation
 
-Run with:
-```bash
-notidock
-```
-
-### Docker
-
-Run as a Docker container:
+### Using Docker (Recommended)
 
 ```bash
-docker run \
+docker run -d \
+  --name notidock \
   --network host \
   --read-only \
   --security-opt no-new-privileges=true \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   --group-add $(stat -c '%g' /var/run/docker.sock) \
   -e NOTIDOCK_SLACK_WEBHOOK_URL=your_webhook_url \
-  clasyc/notidock
+  clasyc/notidock:latest
 ```
-Replace `your_webhook_url` with your Slack webhook URL.
-
-## Configuration
-
-### Environment Variables
-
-| Environment Variable             | Description                                                                                                                          | Default                       |
-|----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|-------------------------------|
-| `NOTIDOCK_MONITOR_ALL`           | When "true", monitors all containers unless explicitly excluded. When "false", only monitors containers with explicit include labels | `false`                       |
-| `NOTIDOCK_TRACKED_EVENTS`        | Comma-separated list of events to track                                                                                              | `create,start,die,stop,kill`  |
-| `NOTIDOCK_TRACKED_EXITCODES`     | Comma-separated list of container exit codes to track. When empty, tracks all exit codes                                             | `""` (all exit codes)         |
-| `NOTIDOCK_SLACK_WEBHOOK_URL`     | Webhook URL for Slack notifications                                                                                                  | -                             |
-| `NOTIDOCK_DOCKER_SOCKET`         | Custom Docker socket path to connect to Docker daemon                                                                                | `unix:///var/run/docker.sock` |
-| `NOTIDOCK_WINDOW_DURATION`       | Duration in seconds for the sliding window to track notification events                                                              | `60` (1 minute)               |
-| `NOTIDOCK_EVENT_THRESHOLD`       | Maximum number of notifications allowed within the window duration before throttling                                                 | `20`                          |
-| `NOTIDOCK_NOTIFICATION_COOLDOWN` | Time in seconds to wait before resuming notifications after being throttled                                                          | `0` (disabled)                |
-
-### Container Labels
-
-All labels use the `notidock.` prefix:
-
-- `notidock.exclude`: Exclude container from monitoring when in monitor-all mode
-- `notidock.include`: Include container for monitoring when in selective mode
-- `notidock.name`: Custom name to use in log and notifications
-- `notidock.events`: Comma-separated list of events to track for this specific container
-- `notidock.exitcodes`: Comma-separated list of container exit codes to track for this specific container
-
-## Running
 
 ### Using Docker Compose
 
 ```yaml
+version: '3.8'
+
 services:
   notidock:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: clasyc/notidock:latest
+    container_name: notidock
     read_only: true
     security_opt:
       - no-new-privileges:true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      - SLACK_WEBHOOK_URL=your_webhook_url
+      - NOTIDOCK_SLACK_WEBHOOK_URL=your_webhook_url
     group_add:
-      - "984"  # Docker socket group ID
-    networks:
-      - notidock-net
+      - "${DOCKER_SOCKET_GID:-0}"  # Will be replaced with actual GID
 
 networks:
-  notidock-net:
+  default:
     driver: bridge
 ```
 
-> [!NOTE]
-> **Note:** check your Docker socket group ID with `stat -c '%g' /var/run/docker.sock` and set it accordingly in the
-> `group_add` section.
+### Using Binary
 
-Run with:
 ```bash
-docker compose up
+# Download the latest release
+curl -L -o ~/.local/bin/notidock \
+  https://github.com/Clasyc/notidock/releases/download/v1.1.1/notidock-linux-amd64
+
+# Make it executable
+chmod +x ~/.local/bin/notidock
+
+# Run
+notidock
 ```
 
-### Using Docker Run
+## Usage Examples
 
-One-liner to build and run:
-```bash
-docker build -t notidock . && docker run --network host --read-only --security-opt no-new-privileges=true -v /var/run/docker.sock:/var/run/docker.sock:ro --group-add $(stat -c '%g' /var/run/docker.sock) -e SLACK_WEBHOOK_URL=your_webhook_url notidock
-```
+### Monitor Specific Container
 
-## Example Usage
-
-Monitor a specific container:
 ```bash
 docker run -d \
-  --label notidock.name=my-app \
+  --name my-monitored-app \
   --label notidock.include=true \
-  --label notidock.events=create,die \
-  alpine sleep infinity
+  --label notidock.name="My Application" \
+  --label notidock.events=create,die,oom \
+  your-image
 ```
 
-Exclude a container from monitoring:
+### Exclude Container from Monitoring
+
 ```bash
 docker run -d \
+  --name background-service \
   --label notidock.exclude=true \
-  alpine sleep infinity
+  your-image
 ```
 
-## Security
+### Enable Health Monitoring
 
-Notidock is designed with security in mind:
-- Runs as a non-root user
-- Read-only filesystem
-- No new privileges
-- Read-only access to Docker socket
-- Minimal base image
-
-## Event Output
-
-Events are logged in structured format:
+```bash
+docker run -d \
+  --name notidock \
+  -e NOTIDOCK_MONITOR_HEALTH=true \
+  -e NOTIDOCK_HEALTH_TIMEOUT=30s \
+  -e NOTIDOCK_MAX_FAILING_STREAK=5 \
+  # ... other options ...
+  clasyc/notidock
 ```
-2024/12/14 18:31:56 INFO Container event containerName=my-app action=create time=1734193947 labels=map[...]
-```
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NOTIDOCK_MONITOR_ALL` | Monitor all containers unless excluded | `false` |
+| `NOTIDOCK_TRACKED_EVENTS` | Events to track | `create,start,die,stop,kill` |
+| `NOTIDOCK_TRACKED_EXITCODES` | Exit codes to track | `""` (all) |
+| `NOTIDOCK_SLACK_WEBHOOK_URL` | Slack webhook URL | Required |
+| [View all variables](docs/configuration.md#environment-variables) | | |
+
+### Container Labels
+
+| Label | Description |
+|-------|-------------|
+| `notidock.include` | Include container in monitoring |
+| `notidock.exclude` | Exclude from monitoring |
+| `notidock.name` | Custom name in notifications |
+| [View all labels](docs/configuration.md#container-labels) | |
+
+## Detailed Configuration
+
+For complete configuration options, including:
+- All environment variables
+- Available container labels
+- Event types and their descriptions
+- Health monitoring options
+- Notification features and throttling
+- Security considerations
+
+👉 [View Full Configuration Guide](docs/configuration.md)
+
+## Security Features
+
+- ✅ Non-root user execution
+- ✅ Read-only filesystem
+- ✅ No new privileges
+- ✅ Read-only Docker socket access
+- ✅ Minimal base image
 
 ## Building from Source
 
 Requirements:
 - Go 1.23 or later
-- Docker
+- Docker (optional)
 
-Build the binary:
 ```bash
+# Clone repository
+git clone https://github.com/clasyc/notidock.git
+cd notidock
+
+# Build binary
 go build -o notidock
+
+# Build Docker image (optional)
+docker build -t notidock .
 ```
+
+## Contributing
+
+Contributions are welcome! Simply fork the repository, create a new branch, and submit a pull request.
 
 ## License
 
+This project is licensed under the MIT License - see the [LICENSE.txt](LICENSE) file for details.
+
 ## References
-- [Docker API](https://docs.docker.com/reference/api/engine/version/v1.43/#tag/System/operation/SystemEvents)
+
+- [Docker Engine API](https://docs.docker.com/engine/api/v1.43/)
+- [Slack API](https://api.slack.com/messaging/webhooks)
+
+---
+
+<sub>Made by [Clasyc](https://github.com/clasyc)</sub>

@@ -158,7 +158,7 @@ func TestGetColor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			color := getColor(tt.action)
+			color := getColor(tt.action, nil)
 			if color != tt.expected {
 				t.Errorf("getColor(%q) = %q, want %q", tt.action, color, tt.expected)
 			}
@@ -231,7 +231,7 @@ func TestGetIcon(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getIcon(tt.action, tt.exitCode)
+			got := getIcon(tt.action, tt.exitCode, nil)
 			if got != tt.want {
 				t.Errorf("getIcon() = %v, want %v", got, tt.want)
 			}

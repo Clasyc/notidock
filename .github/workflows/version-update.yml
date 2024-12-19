@@ -23,6 +23,6 @@ jobs:
       - name: Commit README update
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "docs: update version in README.md to ${GITHUB_REF_NAME} [skip ci]"
+          commit_message: "docs: update version in README.md to ${{ github.ref_name }} [skip ci]"
           file_pattern: 'README.md'
           branch: master

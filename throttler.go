@@ -2,9 +2,7 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"strconv"
+	"notidock/config"
 	"sync"
 	"time"
 )
@@ -20,7 +18,7 @@ type eventBucket struct {
 }
 
 type throttleState struct {
-	buckets        []eventBucket // Stores event counts in time buckets
+	buckets        []eventBucket
 	suspended      bool
 	suspendedAt    time.Time
 	bucketDuration time.Duration
@@ -29,74 +27,30 @@ type throttleState struct {
 type NotificationThrottler struct {
 	mu              sync.RWMutex
 	state           map[containerKey]*throttleState
-	windowDuration  time.Duration // Total duration of the sliding window
-	bucketDuration  time.Duration // Duration of each bucket (e.g., 5 seconds)
-	threshold       int           // Max events allowed in window
+	windowDuration  time.Duration
+	bucketDuration  time.Duration // Fixed at 5 seconds
+	threshold       int
 	cooldownPeriod  time.Duration
 	cleanupInterval time.Duration
 }
 
-func NewNotificationThrottler() (*NotificationThrottler, error) {
-	windowSeconds, err := getEnvDuration("NOTIDOCK_WINDOW_DURATION")
-	if err != nil {
-		return nil, fmt.Errorf("invalid window duration: %w", err)
-	}
-	if windowSeconds == 0 {
-		windowSeconds = 60 * time.Second // Default 1 minute window
-	}
-
-	bucketSeconds := 5 * time.Second // Fixed 5-second buckets
-
-	threshold, err := getEnvInt("NOTIDOCK_EVENT_THRESHOLD")
-	if err != nil {
-		return nil, fmt.Errorf("invalid event threshold: %w", err)
-	}
-	if threshold == 0 {
-		threshold = 20 // Default threshold
-	}
-
-	cooldown, err := getEnvDuration("NOTIDOCK_NOTIFICATION_COOLDOWN")
-	if err != nil {
-		return nil, fmt.Errorf("invalid notification cooldown: %w", err)
-	}
-
-	nt := &NotificationThrottler{
+func NewNotificationThrottler(c config.AppConfig) *NotificationThrottler {
+	return &NotificationThrottler{
 		state:           make(map[containerKey]*throttleState),
-		windowDuration:  windowSeconds,
-		bucketDuration:  bucketSeconds,
-		threshold:       threshold,
-		cooldownPeriod:  cooldown,
+		windowDuration:  c.WindowDuration,
+		bucketDuration:  5 * time.Second, // Fixed bucket duration
+		threshold:       c.EventThreshold,
+		cooldownPeriod:  c.NotificationCooldown,
 		cleanupInterval: 1 * time.Hour,
 	}
-
-	go nt.periodicCleanup()
-
-	return nt, nil
-}
-
-func getEnvInt(name string) (int, error) {
-	val := os.Getenv(name)
-	if val == "" {
-		return 0, nil
-	}
-	return strconv.Atoi(val)
-}
-
-func getEnvDuration(name string) (time.Duration, error) {
-	val := os.Getenv(name)
-	if val == "" {
-		return 0, nil
-	}
-
-	seconds, err := strconv.Atoi(val)
-	if err != nil {
-		return 0, err
-	}
-
-	return time.Duration(seconds) * time.Second, nil
 }
 
 func (nt *NotificationThrottler) ShouldNotify(containerName, imageTag string) bool {
+	// If threshold is 0 or negative, throttling is disabled
+	if nt.threshold <= 0 {
+		return true
+	}
+
 	key := containerKey{name: containerName, imageTag: imageTag}
 	now := time.Now()
 

@@ -33,7 +33,7 @@ type field struct {
 }
 
 // getIcon returns an appropriate emoji based on the action
-func getIcon(action string, exitCode string) string {
+func getIcon(action string, exitCode string, labels map[string]string) string {
 	// First check for specific exit codes that might override the action icon
 	if exitCode != "" {
 		// Check for OOM kill
@@ -43,6 +43,19 @@ func getIcon(action string, exitCode string) string {
 		// Check for error exit codes
 		if exitCode != "0" {
 			return ":x:"
+		}
+	}
+
+	// Check for health status events first
+	if action == "health_status" {
+		status := labels["health_status"]
+		switch status {
+		case "healthy":
+			return ":white_check_mark:"
+		case "unhealthy":
+			return ":warning:"
+		default:
+			return ":question:"
 		}
 	}
 
@@ -68,17 +81,38 @@ func getIcon(action string, exitCode string) string {
 		return ":arrows_counterclockwise:"
 	case "update":
 		return ":arrows_clockwise:"
+	case "destroy":
+		return ":x:"
+	case "exec_create":
+		return ":terminal:"
+	case "exec_start":
+		return ":arrow_forward: :terminal:"
+	case "exec_die":
+		return ":x: :terminal:"
 	default:
 		return ":information_source:"
 	}
 }
 
-// getColor returns a color based on the action
-func getColor(action string) string {
+// getColor improvements
+func getColor(action string, labels map[string]string) string {
+	// Check for health status events first
+	if action == "health_status" {
+		status := labels["health_status"]
+		switch status {
+		case "healthy":
+			return "#36a64f" // green
+		case "unhealthy":
+			return "#ff0000" // red
+		default:
+			return "#808080" // grey
+		}
+	}
+
 	switch action {
 	case "create", "start", "unpause":
 		return "#36a64f" // green
-	case "die", "stop", "kill":
+	case "die", "stop", "kill", "destroy":
 		return "#ff0000" // red
 	case "oom":
 		return "#8B0000" // dark red
@@ -86,6 +120,10 @@ func getColor(action string) string {
 		return "#FFA500" // orange
 	case "restart", "update":
 		return "#1E90FF" // blue
+	case "exec_create", "exec_start":
+		return "#36a64f" // green
+	case "exec_die":
+		return "#ff0000" // red
 	default:
 		return "#808080" // grey
 	}
@@ -127,37 +165,57 @@ func (s *SlackNotifier) Send(ctx context.Context, event Event) error {
 		},
 	}
 
-	// Add image information if available
-	if image, ok := event.Labels["image"]; ok {
-		fields = append(fields, field{
-			Title: "Image",
-			Value: image,
-			Short: true,
-		})
+	// Special handling for health status events
+	if event.Action == "health_status" {
+		if status, ok := event.Labels["health_status"]; ok {
+			fields = append(fields, field{
+				Title: "Health Status",
+				Value: status,
+				Short: true,
+			})
+		}
+		if streak, ok := event.Labels["failing_streak"]; ok {
+			fields = append(fields, field{
+				Title: "Failing Streak",
+				Value: streak,
+				Short: true,
+			})
+		}
+	} else {
+		// Regular event handling
+		// Add image information if available
+		if image, ok := event.Labels["image"]; ok {
+			fields = append(fields, field{
+				Title: "Image",
+				Value: image,
+				Short: true,
+			})
+		}
+
+		// Add execution duration if available
+		if event.ExecDuration != "N/A" {
+			fields = append(fields, field{
+				Title: "Duration",
+				Value: event.ExecDuration,
+				Short: true,
+			})
+		}
+
+		// Add exit code if available
+		if event.ExitCode != "" {
+			fields = append(fields, field{
+				Title: "Exit Code",
+				Value: event.ExitCode,
+				Short: true,
+			})
+		}
 	}
 
-	// Add execution duration if available
-	if event.ExecDuration != "N/A" {
-		fields = append(fields, field{
-			Title: "Duration",
-			Value: event.ExecDuration,
-			Short: true,
-		})
-	}
-
-	// Add exit code if available
-	if event.ExitCode != "" {
-		fields = append(fields, field{
-			Title: "Exit Code",
-			Value: event.ExitCode,
-			Short: true,
-		})
-	}
-
-	// Add all labels except those we've already explicitly handled
+	// Add remaining labels that haven't been explicitly handled
 	for k, v := range event.Labels {
 		// Skip labels we've already handled
-		if k == "image" || k == "exitCode" || k == "execDuration" {
+		if k == "image" || k == "exitCode" || k == "execDuration" ||
+			(event.Action == "health_status" && (k == "health_status" || k == "failing_streak")) {
 			continue
 		}
 		fields = append(fields, field{
@@ -167,14 +225,14 @@ func (s *SlackNotifier) Send(ctx context.Context, event Event) error {
 		})
 	}
 
-	// Get appropriate icon for the event
-	icon := getIcon(event.Action, event.Labels["exitCode"])
+	icon := getIcon(event.Action, event.Labels["exitCode"], event.Labels)
+	color := getColor(event.Action, event.Labels)
 
 	msg := slackMessage{
 		Text: fmt.Sprintf("%s Container Event: %s", icon, event.ContainerName),
 		Attachments: []attachment{
 			{
-				Color:  getColor(event.Action),
+				Color:  color,
 				Fields: fields,
 			},
 		},
