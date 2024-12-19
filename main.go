@@ -18,6 +18,9 @@ import (
 	"time"
 )
 
+// DockerVersion is the API version used for Docker client
+const DockerVersion = "1.43"
+
 type Event struct {
 	Type     string `json:"Type"`
 	Action   string `json:"Action"`
@@ -225,7 +228,7 @@ func createEventRequest(ctx context.Context) (*http.Request, error) {
 	query := url.Values{}
 	query.Add("filters", `{"type":["container"]}`)
 
-	return http.NewRequest("GET", "http://unix/v1.43/events?"+query.Encode(), nil)
+	return http.NewRequest("GET", "http://unix/v"+DockerVersion+"/events?"+query.Encode(), nil)
 }
 
 func processEvents(ctx context.Context, decoder *json.Decoder) chan Event {
