@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.2.0](https://github.com/Clasyc/notidock/compare/v1.1.1...v1.2.0) (2024-12-19)
+
+
+### Features
+
+* add healtness check notification ([3a9b7f9](https://github.com/Clasyc/notidock/commit/3a9b7f9f8f701856673dd6dd0ebbd4898261a340))
+
+
+### Bug Fixes
+
+* slack tests ([db3d0c8](https://github.com/Clasyc/notidock/commit/db3d0c88fc29943af73cc9af5608b5efb19568d2))
+
+
+### Documentation
+
+* add license and logo ([e1c82f0](https://github.com/Clasyc/notidock/commit/e1c82f055f721c5122a5f1df5b60916ecd68c306))
+* update version in README.md to ${GITHUB_REF_NAME} [skip ci] ([2d87a62](https://github.com/Clasyc/notidock/commit/2d87a624ef21d7cb8156d18476a978855894604b))
+
+
+### Refactor
+
+* configs management ([511ec7b](https://github.com/Clasyc/notidock/commit/511ec7b01f83d1ec7931c38cbd1768b51e20f707))
+
 ## [1.1.1](https://github.com/Clasyc/notidock/compare/v1.1.0...v1.1.1) (2024-12-14)
 
 
