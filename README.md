@@ -63,7 +63,7 @@ networks:
 ```bash
 # Download the latest release
 curl -L -o ~/.local/bin/notidock \
-  https://github.com/Clasyc/notidock/releases/download/v1.1.1/notidock-linux-amd64
+  https://github.com/Clasyc/notidock/releases/download/v1.2.0/notidock-linux-amd64
 
 # Make it executable
 chmod +x ~/.local/bin/notidock
